@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { Auth0Client, User } from '@auth0/auth0-spa-js';
+import { Auth0Client } from '@auth0/auth0-spa-js';
 import { AUTH0_DOMAIN, AUTH0_CLIENT_ID, SUBMIT_RESEARCH_URL, GET_RESEARCH_URL } from './constants';
 import type { AppUser, ResearchResult, ResearchRequestPayload } from './types';
 import Header from './components/Header';
@@ -15,7 +14,9 @@ const auth0Client = new Auth0Client({
   authorizationParams: {
     redirect_uri: window.location.origin
   },
-  cacheLocation: 'memory'
+  // Use localstorage to persist session across redirects
+  cacheLocation: 'localstorage',
+  useRefreshTokens: true
 });
 
 const App: React.FC = () => {
@@ -27,8 +28,16 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const handleAuth = async () => {
       try {
+        // Handle the redirect callback if the user is returning from Auth0
+        if (window.location.search.includes("code=") && window.location.search.includes("state=")) {
+            await auth0Client.handleRedirectCallback();
+            // Clean up the URL
+            window.history.replaceState({}, document.title, "/");
+        }
+
+        // Check if the user is authenticated
         const isAuth = await auth0Client.isAuthenticated();
         setIsAuthenticated(isAuth);
         if (isAuth) {
@@ -36,13 +45,13 @@ const App: React.FC = () => {
           setUser(userData || null);
         }
       } catch (e) {
-        console.error('Authentication check failed', e);
-        setError('Authentication check failed.');
+        console.error('Authentication process failed', e);
+        setError('Authentication process failed.');
       } finally {
         setIsAuthLoading(false);
       }
     };
-    checkAuth();
+    handleAuth();
   }, []);
 
   const fetchUserResearch = useCallback(async () => {
@@ -84,10 +93,7 @@ const App: React.FC = () => {
 
   const handleLogin = async () => {
     try {
-      await auth0Client.loginWithPopup();
-      const userData = await auth0Client.getUser();
-      setUser(userData || null);
-      setIsAuthenticated(true);
+      await auth0Client.loginWithRedirect();
     } catch (e) {
       console.error('Login failed', e);
       setError('Login failed. Please try again.');
@@ -107,7 +113,7 @@ const App: React.FC = () => {
   const handleResearchSubmit = async (formData: Omit<ResearchRequestPayload, 'email'>) => {
     if (!user?.email) {
       setError('You must be logged in to submit research.');
-      return;
+      return false;
     }
 
     const payload: ResearchRequestPayload = {
