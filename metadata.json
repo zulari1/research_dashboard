@@ -1,0 +1,5 @@
+{
+  "name": "Zolari AI Research Dashboard",
+  "description": "A dashboard to submit and track AI-powered research requests. Authenticate to manage your research pipeline and view results.",
+  "requestFramePermissions": []
+}
